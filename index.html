@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Tournoi Volley 4x4 sur herbe - Format Suisse</title>
+  <title>Tournoi Volley 4x4 CASSON - Format Suisse</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Firebase SDK (compat) -->
@@ -214,9 +214,13 @@
 <body>
 <header>
   <h1>
-    <div class="volley-icon"></div>
-    Tournoi Volley 4x4 sur herbe
-  </h1>
+    <div class="text-center md:text-left">
+                    <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs uppercase tracking-widest font-semibold px-3 py-1 rounded-full">CASSON • 22 MAI 2027</span>
+                    <h1 class="text-3xl md:text-5xl font-extrabold mt-3 tracking-tight flex items-center justify-center md:justify-start gap-3">
+                        <i class="fa-solid fa-volleyball text-grass-500 animate-spin" style="animation-duration: 8s;"></i> Tournoi de volley 4x4 sur herbe
+                    </h1>
+    </div>
+  
   <div class="header-buttons">
     <button id="btnResultsView">Résultats & Classement</button>
     <button id="btnLiveView">Matchs en cours</button>
@@ -396,6 +400,7 @@
     const tbody = document.querySelector("#teamsTable tbody");
     tbody.innerHTML = "";
     teams
+      .slice()
       .sort((a, b) => b.points - a.points || b.wins - a.wins)
       .forEach((t, idx) => {
         const tr = document.createElement("tr");
@@ -435,7 +440,7 @@
   function renderRankingTable() {
     const tbody = document.querySelector("#rankingTable tbody");
     tbody.innerHTML = "";
-    const sorted = [...teams].sort((a, b) => b.points - a.points || b.wins - a.wins);
+    const sorted = teams.slice().sort((a, b) => b.points - a.points || b.wins - a.wins);
     sorted.forEach((t, idx) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -449,16 +454,27 @@
     });
   }
 
+  // Synchro temps réel Firebase
+  function subscribeFirebase() {
+    db.collection(TEAMS_COLLECTION).onSnapshot(snapshot => {
+      teams = snapshot.docs.map(doc => doc.data());
+      renderTeamsTable();
+    });
+
+    db.collection(MATCHES_COLLECTION).onSnapshot(snapshot => {
+      matches = snapshot.docs.map(doc => doc.data());
+      renderScheduleTable();
+    });
+  }
+
   // Ajout équipes
   document.getElementById("btnAddTeam").addEventListener("click", () => {
     const name = document.getElementById("newTeamName").value.trim();
     if (!name) return;
     const id = uuid();
     const team = { id, name, points: 0, wins: 0, losses: 0 };
-    teams.push(team);
-    document.getElementById("newTeamName").value = "";
-    renderTeamsTable();
     db.collection(TEAMS_COLLECTION).doc(id).set(team);
+    document.getElementById("newTeamName").value = "";
   });
 
   document.getElementById("btnPasteImport").addEventListener("click", () => {
@@ -470,11 +486,9 @@
       if (!name) return;
       const id = uuid();
       const team = { id, name, points: 0, wins: 0, losses: 0 };
-      teams.push(team);
       db.collection(TEAMS_COLLECTION).doc(id).set(team);
     });
     document.getElementById("pasteArea").value = "";
-    renderTeamsTable();
   });
 
   document.getElementById("fileImport").addEventListener("change", (e) => {
@@ -490,16 +504,14 @@
         if (!name) return;
         const id = uuid();
         const team = { id, name, points: 0, wins: 0, losses: 0 };
-        teams.push(team);
         db.collection(TEAMS_COLLECTION).doc(id).set(team);
       });
-      renderTeamsTable();
     };
     reader.readAsText(file, "utf-8");
   });
 
   // Génération planning suisse
-  document.getElementById("btnGenerateSchedule").addEventListener("click", () => {
+  document.getElementById("btnGenerateSchedule").addEventListener("click", async () => {
     const nbCourts = parseInt(document.getElementById("nbCourts").value, 10) || 1;
     if (teams.length < 2) {
       alert("Ajoute au moins 2 équipes avant de générer le planning.");
@@ -516,7 +528,12 @@
     const lunchDuration = parseInt(document.getElementById("lunchDuration").value, 10) || 45;
     const lunchEnd = lunchStart + lunchDuration;
 
-    matches = [];
+    // Option simple : on efface les anciens matchs avant de régénérer
+    const oldMatchesSnap = await db.collection(MATCHES_COLLECTION).get();
+    const batchDel = db.batch();
+    oldMatchesSnap.forEach(doc => batchDel.delete(doc.ref));
+    await batchDel.commit();
+
     let currentTime = startMinutes;
     let round = 1;
 
@@ -526,7 +543,7 @@
         continue;
       }
 
-      const sortedTeams = [...teams].sort((a, b) => b.points - a.points || b.wins - a.wins);
+      const sortedTeams = teams.slice().sort((a, b) => b.points - a.points || b.wins - a.wins);
       const usedIds = new Set();
       let court = 1;
       for (let i = 0; i < sortedTeams.length - 1 && court <= nbCourts; i++) {
@@ -554,7 +571,6 @@
           scoreA: null,
           scoreB: null
         };
-        matches.push(match);
         db.collection(MATCHES_COLLECTION).doc(id).set(match);
         court++;
       }
@@ -563,7 +579,6 @@
       round++;
     }
 
-    renderScheduleTable();
     alert("Planning généré. Tu peux saisir les scores directement dans le tableau.");
   });
 
@@ -585,6 +600,10 @@
       scoreB: match.scoreB
     });
 
+    recalcPoints();
+  });
+
+  function recalcPoints() {
     teams.forEach(t => {
       t.points = 0;
       t.wins = 0;
@@ -608,7 +627,6 @@
         teamB.points += 1;
       }
     });
-
     teams.forEach(t => {
       db.collection(TEAMS_COLLECTION).doc(t.id).update({
         points: t.points,
@@ -616,9 +634,7 @@
         losses: t.losses
       });
     });
-
-    renderTeamsTable();
-  });
+  }
 
   // Boutons vues
   document.getElementById("btnResultsView").addEventListener("click", () => {
@@ -680,12 +696,6 @@
   document.getElementById("btnReset").addEventListener("click", async () => {
     if (!confirm("Réinitialiser le tournoi et vider toutes les données (local + Firebase) ?")) return;
 
-    teams = [];
-    matches = [];
-    renderTeamsTable();
-    renderScheduleTable();
-    renderRankingTable();
-
     const teamsSnap = await db.collection(TEAMS_COLLECTION).get();
     const batch1 = db.batch();
     teamsSnap.forEach(doc => batch1.delete(doc.ref));
@@ -731,17 +741,8 @@
     }
   }
 
-  async function loadFromFirebase() {
-    const teamsSnap = await db.collection(TEAMS_COLLECTION).get();
-    teams = teamsSnap.docs.map(doc => doc.data());
-    const matchesSnap = await db.collection(MATCHES_COLLECTION).get();
-    matches = matchesSnap.docs.map(doc => doc.data());
-    renderTeamsTable();
-    renderScheduleTable();
-  }
-
-  (async function init() {
-    await loadFromFirebase();
+  (function init() {
+    subscribeFirebase();
     applyViewFromQuery();
   })();
 </script>
