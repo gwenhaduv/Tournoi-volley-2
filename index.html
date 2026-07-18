@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tournoi Volley 4x4 - Format Suisse</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Firebase SDKs -->
+  <!-- Remplace les scripts ci-dessous par ceux de ton projet Firebase (version modular ou compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+  <!-- QRCode.js (simple lib pour générer un QR code) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      background: #f5f7fb;
+      color: #222;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #1e88e5, #42a5f5);
+      color: #fff;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .header-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: #fff;
+      color: #1e88e5;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+      background: #e3f2fd;
+    }
+    button.danger {
+      background: #ffebee;
+      color: #c62828;
+    }
+    button.danger:hover {
+      background: #ffcdd2;
+    }
+    main {
+      padding: 16px 20px 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    section {
+      margin-bottom: 24px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px 18px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    section h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+      color: #1e88e5;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      color: #555;
+    }
+    input[type="number"],
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #cfd8dc;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+    .small-note {
+      font-size: 0.75rem;
+      color: #777;
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid #e0e0e0;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #f1f5fb;
+    }
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      background: #e3f2fd;
+      color: #1e88e5;
+      margin-left: 6px;
+    }
+    .qr-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .qr-frame {
+      padding: 12px;
+      border-radius: 16px;
+      background: radial-gradient(circle at top left, #1e88e5, #0d47a1);
+      box-shadow: 0 8px 20px rgba(13,71,161,0.35);
+    }
+    #qrcode {
+      background: #fff;
+      padding: 10px;
+      border-radius: 12px;
+    }
+    .live-match-card {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #e3f2fd;
+      border: 1px solid #bbdefb;
+    }
+    .live-match-card h3 {
+      margin: 0 0 4px;
+      font-size: 1rem;
+      color: #0d47a1;
+    }
+    .live-match-card span {
+      display: block;
+      font-size: 0.9rem;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #f1f8e9;
+      color: #558b2f;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Tournoi Volley 4x4 - Format Suisse</h1>
+  <div class="header-buttons">
+    <button id="btnResultsView">Résultats & Classement</button>
+    <button id="btnLiveView">Matchs en cours</button>
+    <button class="danger" id="btnReset">Réinitialiser le tournoi</button>
+  </div>
+</header>
+
+<main>
+  <!-- Vue principale (configuration + gestion) -->
+  <section id="configSection">
+    <h2>Configuration du tournoi</h2>
+    <div class="grid">
+      <div>
+        <label for="nbTeams">Nombre d'équipes</label>
+        <input type="number" id="nbTeams" min="2" value="8" />
+        <span class="small-note">Tu peux ensuite ajouter / importer des équipes plus précisément.</span>
+      </div>
+      <div>
+        <label for="nbCourts">Nombre de terrains</label>
+        <input type="number" id="nbCourts" min="1" value="3" />
+      </div>
+      <div>
+        <label>Horaires & format</label>
+        <div class="pill">
+          <span>Début: 10h30</span> • <span>Fin: 18h00</span>
+        </div>
+        <div class="small-note">
+          Matchs de 15 min + 5 min de rotation. Pause midi de 45 min (par défaut 12h30–13h15).
+        </div>
+      </div>
+      <div>
+        <label for="lunchStart">Début pause midi</label>
+        <input type="time" id="lunchStart" value="12:30" />
+        <label for="lunchDuration" style="margin-top:6px;">Durée pause midi (minutes)</label>
+        <input type="number" id="lunchDuration" value="45" min="15" />
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <button id="btnGenerateSchedule">Générer le planning (format suisse simplifié)</button>
+      <span class="small-note">
+        Les appariements sont générés par rondes en fonction des points (simplifié). Tu pourras ajuster.
+      </span>
+    </div>
+  </section>
+
+  <section id="teamsSection">
+    <h2>Gestion des équipes</h2>
+    <div class="grid">
+      <div>
+        <label for="newTeamName">Ajouter une équipe manuellement</label>
+        <input type="text" id="newTeamName" placeholder="Nom de l'équipe" />
+        <button id="btnAddTeam" style="margin-top:6px;">Ajouter l'équipe</button>
+      </div>
+      <div>
+        <label for="fileImport">Importer depuis un fichier CSV/XLS</label>
+        <input type="file" id="fileImport" accept=".csv,.xls,.xlsx" />
+        <span class="small-note">
+          Suggestion : exporte ton fichier Excel en CSV pour une importation plus fiable.
+        </span>
+      </div>
+      <div>
+        <label for="pasteArea">Coller des colonnes Excel</label>
+        <textarea id="pasteArea" placeholder="Colle ici une colonne de noms d'équipes (une par ligne)."></textarea>
+        <button id="btnPasteImport" style="margin-top:6px;">Importer les équipes collées</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="flex-between">
+        <h3 style="margin:0;">Liste des équipes</h3>
+        <span class="badge" id="teamsCountBadge">0 équipe</span>
+      </div>
+      <table id="teamsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nom</th>
+            <th>Points</th>
+            <th>Victoires</th>
+            <th>Défaites</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="scheduleSection">
+    <div class="flex-between">
+      <h2>Planning des matchs</h2>
+      <span class="small-note">
+        Format suisse simplifié : les équipes avec des scores proches se rencontrent à chaque ronde.
+      </span>
+    </div>
+    <table id="scheduleTable">
+      <thead>
+        <tr>
+          <th>Ronde</th>
+          <th>Heure</th>
+          <th>Terrain</th>
+          <th>Équipe A</th>
+          <th>Équipe B</th>
+          <th>Score A</th>
+          <th>Score B</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="resultsSection">
+    <div class="flex-between">
+      <h2>Résultats & Classement</h2>
+      <span class="small-note">Cette vue est aussi accessible via le bouton en en-tête.</span>
+    </div>
+    <table id="rankingTable">
+      <thead>
+        <tr>
+          <th>Rang</th>
+          <th>Équipe</th>
+          <th>Points</th>
+          <th>Victoires</th>
+          <th>Défaites</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- Vue "Matchs en cours" (utilisée quand on ouvre l'onglet dédié) -->
+  <section id="liveSection" class="hidden">
+    <h2>Matchs en cours</h2>
+    <div class="small-note">
+      Défilement automatique des matchs en cours, avec numéro de terrain. Le QR code pointe vers cette vue.
+    </div>
+    <div class="live-match-card" id="liveMatchCard">
+      <h3 id="liveMatchTitle">Aucun match en cours</h3>
+      <span id="liveMatchInfo"></span>
+    </div>
+    <div class="qr-wrapper">
+      <div class="qr-frame">
+        <div id="qrcode"></div>
+      </div>
+      <span class="small-note">
+        QR code stylisé : scannable pour accéder directement à la vue "Matchs en cours".
+      </span>
+    </div>
+  </section>
+</main>
+
+<script>
+  /***********************
+   * Firebase init
+   ***********************/
+  // Remplace par ta config Firebase
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    // ...
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // Collections (tu peux adapter les noms)
+  const TEAMS_COLLECTION = "volley_teams";
+  const MATCHES_COLLECTION = "volley_matches";
+
+  /***********************
+   * État local
+   ***********************/
+  let teams = [];        // {id, name, points, wins, losses}
+  let matches = [];      // {id, round, time, court, teamAId, teamBId, scoreA, scoreB}
+  let liveIndex = 0;
+  let liveInterval = null;
+
+  /***********************
+   * Utilitaires
+   ***********************/
+  function uuid() {
+    return "id-" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+  }
+
+  function updateTeamsBadge() {
+    const badge = document.getElementById("teamsCountBadge");
+    const n = teams.length;
+    badge.textContent = n + (n > 1 ? " équipes" : " équipe");
+  }
+
+  function renderTeamsTable() {
+    const tbody = document.querySelector("#teamsTable tbody");
+    tbody.innerHTML = "";
+    teams
+      .sort((a, b) => b.points - a.points || b.wins - a.wins)
+      .forEach((t, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${t.name}</td>
+          <td>${t.points}</td>
+          <td>${t.wins}</td>
+          <td>${t.losses}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    updateTeamsBadge();
+    renderRankingTable();
+  }
+
+  function renderScheduleTable() {
+    const tbody = document.querySelector("#scheduleTable tbody");
+    tbody.innerHTML = "";
+    matches.forEach(m => {
+      const teamA = teams.find(t => t.id === m.teamAId);
+      const teamB = teams.find(t => t.id === m.teamBId);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${m.round}</td>
+        <td>${m.time}</td>
+        <td>${m.court}</td>
+        <td>${teamA ? teamA.name : "?"}</td>
+        <td>${teamB ? teamB.name : "?"}</td>
+        <td contenteditable="true" data-match="${m.id}" data-side="A">${m.scoreA ?? ""}</td>
+        <td contenteditable="true" data-match="${m.id}" data-side="B">${m.scoreB ?? ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderRankingTable() {
+    const tbody = document.querySelector("#rankingTable tbody");
+    tbody.innerHTML = "";
+    const sorted = [...teams].sort((a, b) => b.points - a.points || b.wins - a.wins);
+    sorted.forEach((t, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td>${t.name}</td>
+        <td>${t.points}</td>
+        <td>${t.wins}</td>
+        <td>${t.losses}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function timeToMinutes(hhmm) {
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  }
+
+  function minutesToTime(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+  }
+
+  /***********************
+   * Gestion des équipes
+   ***********************/
+  document.getElementById("btnAddTeam").addEventListener("click", () => {
+    const name = document.getElementById("newTeamName").value.trim();
+    if (!name) return;
+    const id = uuid();
+    const team = { id, name, points: 0, wins: 0, losses: 0 };
+    teams.push(team);
+    document.getElementById("newTeamName").value = "";
+    renderTeamsTable();
+    // Firebase
+    db.collection(TEAMS_COLLECTION).doc(id).set(team);
+  });
+
+  document.getElementById("btnPasteImport").addEventListener("click", () => {
+    const text = document.getElementById("pasteArea").value.trim();
+    if (!text) return;
+    const lines = text.split(/\r?\n/);
+    lines.forEach(line => {
+      const name = line.trim();
+      if (!name) return;
+      const id = uuid();
+      const team = { id, name, points: 0, wins: 0, losses: 0 };
+      teams.push(team);
+      db.collection(TEAMS_COLLECTION).doc(id).set(team);
+    });
+    document.getElementById("pasteArea").value = "";
+    renderTeamsTable();
+  });
+
+  document.getElementById("fileImport").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target.result;
+      // Simple parse CSV : une équipe par ligne, séparateur ; ou ,
+      const lines = content.split(/\r?\n/);
+      lines.forEach(line => {
+        const parts = line.split(/[;,]/);
+        const name = parts[0]?.trim();
+        if (!name) return;
+        const id = uuid();
+        const team = { id, name, points: 0, wins: 0, losses: 0 };
+        teams.push(team);
+        db.collection(TEAMS_COLLECTION).doc(id).set(team);
+      });
+      renderTeamsTable();
+    };
+    reader.readAsText(file, "utf-8");
+  });
+
+  /***********************
+   * Génération du planning (format suisse simplifié)
+   ***********************/
+  document.getElementById("btnGenerateSchedule").addEventListener("click", () => {
+    const nbCourts = parseInt(document.getElementById("nbCourts").value, 10) || 1;
+    if (teams.length < 2) {
+      alert("Ajoute au moins 2 équipes avant de générer le planning.");
+      return;
+    }
+
+    const startMinutes = timeToMinutes("10:30");
+    const endMinutes = timeToMinutes("18:00");
+    const matchDuration = 15;
+    const rotationDuration = 5;
+    const slotDuration = matchDuration + rotationDuration;
+
+    const lunchStart = timeToMinutes(document.getElementById("lunchStart").value || "12:30");
+    const lunchDuration = parseInt(document.getElementById("lunchDuration").value, 10) || 45;
+    const lunchEnd = lunchStart + lunchDuration;
+
+    matches = [];
+    let currentTime = startMinutes;
+    let round = 1;
+
+    // On génère des rondes jusqu'à ce qu'on n'ait plus de créneaux
+    while (currentTime + matchDuration <= endMinutes) {
+      // Sauter la pause midi
+      if (currentTime >= lunchStart && currentTime < lunchEnd) {
+        currentTime = lunchEnd;
+        continue;
+      }
+
+      // Appariement suisse simplifié : tri par points, puis pairage successif
+      const sortedTeams = [...teams].sort((a, b) => b.points - a.points || b.wins - a.wins);
+      const usedIds = new Set();
+      let court = 1;
+      for (let i = 0; i < sortedTeams.length - 1 && court <= nbCourts; i++) {
+        const tA = sortedTeams[i];
+        if (usedIds.has(tA.id)) continue;
+        // Cherche le prochain adversaire non utilisé
+        let tB = null;
+        for (let j = i + 1; j < sortedTeams.length; j++) {
+          if (!usedIds.has(sortedTeams[j].id)) {
+            tB = sortedTeams[j];
+            break;
+          }
+        }
+        if (!tB) continue;
+        usedIds.add(tA.id);
+        usedIds.add(tB.id);
+
+        const id = uuid();
+        const match = {
+          id,
+          round,
+          time: minutesToTime(currentTime),
+          court: court,
+          teamAId: tA.id,
+          teamBId: tB.id,
+          scoreA: null,
+          scoreB: null
+        };
+        matches.push(match);
+        db.collection(MATCHES_COLLECTION).doc(id).set(match);
+        court++;
+      }
+
+      currentTime += slotDuration;
+      round++;
+    }
+
+    renderScheduleTable();
+    alert("Planning généré. Tu peux ajuster les scores directement dans le tableau.");
+  });
+
+  /***********************
+   * Mise à jour des scores (édition inline)
+   ***********************/
+  document.querySelector("#scheduleTable").addEventListener("input", (e) => {
+    const cell = e.target;
+    const matchId = cell.getAttribute("data-match");
+    const side = cell.getAttribute("data-side");
+    if (!matchId || !side) return;
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+    const value = cell.textContent.trim();
+    const score = value === "" ? null : parseInt(value, 10);
+    if (side === "A") match.scoreA = score;
+    else match.scoreB = score;
+
+    // Mise à jour Firebase
+    db.collection(MATCHES_COLLECTION).doc(matchId).update({
+      scoreA: match.scoreA,
+      scoreB: match.scoreB
+    });
+
+    // Recalcul des points (simplifié : victoire = 2 pts, défaite = 0)
+    teams.forEach(t => {
+      t.points = 0;
+      t.wins = 0;
+      t.losses = 0;
+    });
+    matches.forEach(m => {
+      if (m.scoreA == null || m.scoreB == null) return;
+      const teamA = teams.find(t => t.id === m.teamAId);
+      const teamB = teams.find(t => t.id === m.teamBId);
+      if (!teamA || !teamB) return;
+      if (m.scoreA > m.scoreB) {
+        teamA.points += 2;
+        teamA.wins += 1;
+        teamB.losses += 1;
+      } else if (m.scoreB > m.scoreA) {
+        teamB.points += 2;
+        teamB.wins += 1;
+        teamA.losses += 1;
+      } else {
+        // Égalité : 1 point chacun
+        teamA.points += 1;
+        teamB.points += 1;
+      }
+    });
+
+    // Sync Firebase pour les équipes
+    teams.forEach(t => {
+      db.collection(TEAMS_COLLECTION).doc(t.id).update({
+        points: t.points,
+        wins: t.wins,
+        losses: t.losses
+      });
+    });
+
+    renderTeamsTable();
+  });
+
+  /***********************
+   * Vue résultats / classement dans un onglet séparé
+   ***********************/
+  document.getElementById("btnResultsView").addEventListener("click", () => {
+    const url = window.location.href.split("?")[0] + "?view=results";
+    window.open(url, "_blank");
+  });
+
+  /***********************
+   * Vue matchs en cours + QR code
+   ***********************/
+  document.getElementById("btnLiveView").addEventListener("click", () => {
+    const url = window.location.href.split("?")[0] + "?view=live";
+    window.open(url, "_blank");
+  });
+
+  function startLiveRotation() {
+    if (liveInterval) clearInterval(liveInterval);
+    const liveCardTitle = document.getElementById("liveMatchTitle");
+    const liveCardInfo = document.getElementById("liveMatchInfo");
+
+    function updateLive() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const currentTime = hh + ":" + mm;
+
+      const currentMatches = matches.filter(m => m.time === currentTime);
+      if (currentMatches.length === 0) {
+        liveCardTitle.textContent = "Aucun match en cours";
+        liveCardInfo.textContent = "Prochain créneau à " + (matches[0]?.time || "—");
+        return;
+      }
+      if (liveIndex >= currentMatches.length) liveIndex = 0;
+      const m = currentMatches[liveIndex];
+      const teamA = teams.find(t => t.id === m.teamAId);
+      const teamB = teams.find(t => t.id === m.teamBId);
+      liveCardTitle.textContent = `Terrain ${m.court} • ${m.time}`;
+      liveCardInfo.textContent = `${teamA?.name || "?"} vs ${teamB?.name || "?"}`;
+      liveIndex++;
+    }
+
+    updateLive();
+    liveInterval = setInterval(updateLive, 10000); // toutes les 10s
+  }
+
+  function initQRCodeForLiveView() {
+    const baseUrl = window.location.href.split("?")[0];
+    const liveUrl = baseUrl + "?view=live";
+    new QRCode(document.getElementById("qrcode"), {
+      text: liveUrl,
+      width: 160,
+      height: 160,
+      colorDark: "#0d47a1",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  }
+
+  /***********************
+   * Réinitialisation du tournoi
+   ***********************/
+  document.getElementById("btnReset").addEventListener("click", async () => {
+    if (!confirm("Réinitialiser le tournoi et vider toutes les données (local + Firebase) ?")) return;
+
+    // Local
+    teams = [];
+    matches = [];
+    renderTeamsTable();
+    renderScheduleTable();
+    renderRankingTable();
+
+    // Firebase : suppression des docs
+    const teamsSnap = await db.collection(TEAMS_COLLECTION).get();
+    const batch1 = db.batch();
+    teamsSnap.forEach(doc => batch1.delete(doc.ref));
+    await batch1.commit();
+
+    const matchesSnap = await db.collection(MATCHES_COLLECTION).get();
+    const batch2 = db.batch();
+    matchesSnap.forEach(doc => batch2.delete(doc.ref));
+    await batch2.commit();
+
+    alert("Tournoi réinitialisé.");
+  });
+
+  /***********************
+   * Gestion des vues selon ?view=
+   ***********************/
+  function applyViewFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    const configSection = document.getElementById("configSection");
+    const teamsSection = document.getElementById("teamsSection");
+    const scheduleSection = document.getElementById("scheduleSection");
+    const resultsSection = document.getElementById("resultsSection");
+    const liveSection = document.getElementById("liveSection");
+
+    if (view === "results") {
+      configSection.classList.add("hidden");
+      teamsSection.classList.add("hidden");
+      scheduleSection.classList.add("hidden");
+      resultsSection.classList.remove("hidden");
+      liveSection.classList.add("hidden");
+    } else if (view === "live") {
+      configSection.classList.add("hidden");
+      teamsSection.classList.add("hidden");
+      scheduleSection.classList.add("hidden");
+      resultsSection.classList.add("hidden");
+      liveSection.classList.remove("hidden");
+      initQRCodeForLiveView();
+      startLiveRotation();
+    } else {
+      // Vue complète par défaut
+      configSection.classList.remove("hidden");
+      teamsSection.classList.remove("hidden");
+      scheduleSection.classList.remove("hidden");
+      resultsSection.classList.remove("hidden");
+      liveSection.classList.add("hidden");
+    }
+  }
+
+  /***********************
+   * Chargement initial depuis Firebase
+   ***********************/
+  async function loadFromFirebase() {
+    const teamsSnap = await db.collection(TEAMS_COLLECTION).get();
+    teams = teamsSnap.docs.map(doc => doc.data());
+    const matchesSnap = await db.collection(MATCHES_COLLECTION).get();
+    matches = matchesSnap.docs.map(doc => doc.data());
+    renderTeamsTable();
+    renderScheduleTable();
+  }
+
+  (async function init() {
+    await loadFromFirebase();
+    applyViewFromQuery();
+  })();
+</script>
+</body>
+</html>
